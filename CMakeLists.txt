@@ -54,6 +54,35 @@ set(NAP_CORE_SOURCES
     src/core/threading/TaskQueue.cpp
     src/core/threading/SpinLock.cpp
     src/core/threading/ThreadBarrier.cpp
+    # Parameters (Phase 2)
+    src/core/parameters/FloatParameter.cpp
+    src/core/parameters/IntParameter.cpp
+    src/core/parameters/BoolParameter.cpp
+    src/core/parameters/EnumParameter.cpp
+    src/core/parameters/TriggerParameter.cpp
+    src/core/parameters/ParameterGroup.cpp
+    # Serialization (Phase 2)
+    src/core/serialization/JsonSerializer.cpp
+    src/core/serialization/BinarySerializer.cpp
+    src/core/serialization/PresetManager.cpp
+    src/core/serialization/StateVector.cpp
+)
+
+# Driver sources (Phase 2)
+set(NAP_DRIVER_SOURCES
+    src/drivers/PulseAudioDriver.cpp
+    src/drivers/AlsaDriver.cpp
+    src/drivers/JackDriver.cpp
+    src/drivers/ASIODriver.cpp
+    src/drivers/DummyDriver.cpp
+)
+
+# DSP Utility sources (Phase 2)
+set(NAP_DSP_SOURCES
+    src/utils/dsp/FastFourierTransform.cpp
+    src/utils/dsp/WindowFunctions.cpp
+    src/utils/dsp/Resampler.cpp
+    src/utils/dsp/DCBlocker.cpp
 )
 
 # Node sources
@@ -92,6 +121,8 @@ set(NAP_NODE_SOURCES
 add_library(native-audio-pipe STATIC
     ${NAP_CORE_SOURCES}
     ${NAP_NODE_SOURCES}
+    ${NAP_DRIVER_SOURCES}
+    ${NAP_DSP_SOURCES}
 )
 
 target_include_directories(native-audio-pipe
@@ -119,10 +150,14 @@ if(NAP_BUILD_TESTS)
         tests/unit/core/graph/*.cpp
         tests/unit/core/memory/*.cpp
         tests/unit/core/threading/*.cpp
+        tests/unit/core/parameters/*.cpp
+        tests/unit/core/serialization/*.cpp
         tests/unit/nodes/math/*.cpp
         tests/unit/nodes/source/*.cpp
         tests/unit/nodes/effect/*.cpp
         tests/unit/nodes/utility/*.cpp
+        tests/unit/drivers/*.cpp
+        tests/unit/utils/dsp/*.cpp
     )
 
     add_executable(nap_tests ${NAP_TEST_SOURCES})

@@ -3,31 +3,62 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace nap {
 
 /**
- * @brief Interface for audio node parameters with automation support.
+ * @brief Parameter type enumeration
+ */
+enum class ParameterType {
+    Float,      ///< Continuous floating-point value
+    Int,        ///< Discrete integer value
+    Bool,       ///< Boolean toggle
+    Enum,       ///< Selection from enumerated options
+    Trigger,    ///< Momentary trigger/event
+    String,     ///< Text value
+    Custom      ///< User-defined type
+};
+
+/**
+ * @brief Base interface for all parameter types.
  *
- * IParameter defines the contract for parameters that can be attached to audio nodes,
- * supporting real-time modulation, smoothing, and value change notifications.
+ * IParameter defines the minimal contract for parameters that can be
+ * attached to audio nodes. Specialized parameter types (FloatParameter,
+ * IntParameter, etc.) provide type-specific functionality.
  */
 class IParameter {
 public:
     virtual ~IParameter() = default;
 
     /**
-     * @brief Get the parameter's unique identifier.
-     * @return Parameter ID as a string
+     * @brief Get the parameter name.
+     * @return Parameter name as a string
      */
-    virtual std::string getParameterId() const = 0;
+    virtual const std::string& getName() const = 0;
 
     /**
-     * @brief Get the display name of the parameter.
-     * @return Display name as a string
+     * @brief Get the parameter type.
+     * @return ParameterType enum value
      */
-    virtual std::string getDisplayName() const = 0;
+    virtual ParameterType getType() const = 0;
+
+    /**
+     * @brief Reset the parameter to its default value.
+     */
+    virtual void reset() = 0;
+};
+
+/**
+ * @brief Extended interface for numeric parameters with automation support.
+ *
+ * INumericParameter extends IParameter with value access, normalization,
+ * range constraints, and smoothing for real-time modulation.
+ */
+class INumericParameter : public IParameter {
+public:
+    ~INumericParameter() override = default;
 
     /**
      * @brief Get the current value of the parameter.
@@ -72,42 +103,32 @@ public:
     virtual float getDefaultValue() const = 0;
 
     /**
-     * @brief Reset the parameter to its default value.
-     */
-    virtual void resetToDefault() = 0;
-
-    /**
      * @brief Get the smoothed value for real-time processing.
+     * @param sampleRate The current sample rate for smoothing calculation
      * @return Smoothed value
      */
-    virtual float getSmoothedValue() = 0;
+    virtual float getSmoothedValue(float sampleRate) = 0;
 
     /**
-     * @brief Set the smoothing time in milliseconds.
-     * @param smoothingMs Smoothing time in milliseconds
+     * @brief Enable or disable value smoothing.
+     * @param enable True to enable smoothing
+     * @param smoothingTime Smoothing time in seconds
      */
-    virtual void setSmoothingTime(float smoothingMs) = 0;
+    virtual void enableSmoothing(bool enable, float smoothingTime = 0.01f) = 0;
 
     /**
      * @brief Get the unit label for display (e.g., "dB", "Hz", "%").
      * @return Unit label as a string
      */
-    virtual std::string getUnitLabel() const = 0;
+    virtual std::string getUnitLabel() const { return ""; }
 
     using ValueChangedCallback = std::function<void(float oldValue, float newValue)>;
 
     /**
      * @brief Register a callback for value changes.
      * @param callback The callback function to register
-     * @return Callback ID for later removal
      */
-    virtual std::uint32_t addValueChangedCallback(ValueChangedCallback callback) = 0;
-
-    /**
-     * @brief Remove a previously registered callback.
-     * @param callbackId The ID of the callback to remove
-     */
-    virtual void removeValueChangedCallback(std::uint32_t callbackId) = 0;
+    virtual void setValueChangedCallback(ValueChangedCallback callback) = 0;
 };
 
 } // namespace nap
