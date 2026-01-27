@@ -1,0 +1,179 @@
+cmake_minimum_required(VERSION 3.16)
+
+project(native-audio-pipe
+    VERSION 1.0.0
+    DESCRIPTION "Enterprise-Grade C++ Audio Engine"
+    LANGUAGES CXX
+)
+
+# C++ Standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Build options
+option(NAP_BUILD_TESTS "Build unit tests" ON)
+option(NAP_BUILD_EXAMPLES "Build examples" OFF)
+option(NAP_ENABLE_SIMD "Enable SIMD optimizations" ON)
+
+# Module path for custom Find modules
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+# Platform-specific settings
+if(APPLE)
+    find_package(CoreAudio)
+endif()
+
+# Compiler warnings
+if(MSVC)
+    add_compile_options(/W4 /WX-)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# SIMD flags
+if(NAP_ENABLE_SIMD)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(-msse4.1)
+    endif()
+endif()
+
+# Core library sources
+set(NAP_CORE_SOURCES
+    # Graph
+    src/core/graph/AudioGraph.cpp
+    src/core/graph/ConnectionManager.cpp
+    src/core/graph/ExecutionSorter.cpp
+    src/core/graph/FeedbackLoopDetector.cpp
+    # Memory
+    src/core/memory/CircularBuffer.cpp
+    src/core/memory/AudioBlockAllocator.cpp
+    src/core/memory/PoolAllocator.cpp
+    # Threading
+    src/core/threading/WorkerThread.cpp
+    src/core/threading/TaskQueue.cpp
+    src/core/threading/SpinLock.cpp
+    src/core/threading/ThreadBarrier.cpp
+)
+
+# Node sources
+set(NAP_NODE_SOURCES
+    # Math nodes
+    src/nodes/math/GainNode.cpp
+    src/nodes/math/PanNode.cpp
+    src/nodes/math/MixerNode.cpp
+    src/nodes/math/SplitterNode.cpp
+    src/nodes/math/InverterNode.cpp
+    src/nodes/math/SummerNode.cpp
+    # Source nodes
+    src/nodes/source/SineOscillator.cpp
+    src/nodes/source/WhiteNoise.cpp
+    src/nodes/source/PinkNoise.cpp
+    src/nodes/source/FileStreamReader.cpp
+    src/nodes/source/ImpulseGenerator.cpp
+    # Effect nodes
+    src/nodes/effect/SimpleDelay.cpp
+    src/nodes/effect/BiQuadFilter.cpp
+    src/nodes/effect/HardClipper.cpp
+    src/nodes/effect/SoftClipper.cpp
+    src/nodes/effect/BitCrusher.cpp
+    src/nodes/effect/RingModulator.cpp
+    src/nodes/effect/Phaser.cpp
+    src/nodes/effect/Flanger.cpp
+    src/nodes/effect/Chorus.cpp
+    src/nodes/effect/ReverbConvolution.cpp
+    # Utility nodes
+    src/nodes/utility/MeterNode.cpp
+    src/nodes/utility/ScopeNode.cpp
+    src/nodes/utility/DCBlockerNode.cpp
+)
+
+# Create the main library
+add_library(native-audio-pipe STATIC
+    ${NAP_CORE_SOURCES}
+    ${NAP_NODE_SOURCES}
+)
+
+target_include_directories(native-audio-pipe
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<INSTALL_INTERFACE:include>
+)
+
+# Link platform libraries
+if(APPLE AND COREAUDIO_FOUND)
+    target_link_libraries(native-audio-pipe PRIVATE ${COREAUDIO_LIBRARIES})
+endif()
+
+# Threading support
+find_package(Threads REQUIRED)
+target_link_libraries(native-audio-pipe PRIVATE Threads::Threads)
+
+# Tests
+if(NAP_BUILD_TESTS)
+    enable_testing()
+    include(cmake/FindGTest.cmake)
+
+    # Collect all test sources
+    file(GLOB_RECURSE NAP_TEST_SOURCES
+        tests/unit/core/graph/*.cpp
+        tests/unit/core/memory/*.cpp
+        tests/unit/core/threading/*.cpp
+        tests/unit/nodes/math/*.cpp
+        tests/unit/nodes/source/*.cpp
+        tests/unit/nodes/effect/*.cpp
+        tests/unit/nodes/utility/*.cpp
+    )
+
+    add_executable(nap_tests ${NAP_TEST_SOURCES})
+
+    target_link_libraries(nap_tests
+        PRIVATE
+            native-audio-pipe
+            ${GTEST_LIBRARIES}
+            ${GTEST_MAIN_LIBRARIES}
+            Threads::Threads
+    )
+
+    target_include_directories(nap_tests
+        PRIVATE
+            ${GTEST_INCLUDE_DIRS}
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+
+    # Register tests with CTest
+    include(GoogleTest)
+    gtest_discover_tests(nap_tests)
+endif()
+
+# Installation
+include(GNUInstallDirs)
+
+install(TARGETS native-audio-pipe
+    EXPORT native-audio-pipe-targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(DIRECTORY src/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nap
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install(EXPORT native-audio-pipe-targets
+    FILE native-audio-pipe-config.cmake
+    NAMESPACE nap::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/native-audio-pipe
+)
+
+# Summary
+message(STATUS "")
+message(STATUS "native-audio-pipe configuration:")
+message(STATUS "  Version:      ${PROJECT_VERSION}")
+message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "  Build tests:  ${NAP_BUILD_TESTS}")
+message(STATUS "  SIMD:         ${NAP_ENABLE_SIMD}")
+if(APPLE)
+    message(STATUS "  CoreAudio:    ${COREAUDIO_FOUND}")
+endif()
+message(STATUS "")
