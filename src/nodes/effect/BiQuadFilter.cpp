@@ -45,8 +45,14 @@ public:
 
 void BiQuadFilter::Impl::calculateCoefficients()
 {
+    // Safety clamp: never exceed 95% of Nyquist frequency
+    // This prevents filter instability and aliasing artifacts
+    const float nyquist = static_cast<float>(sampleRate) / 2.0f;
+    const float maxSafeFreq = nyquist * 0.95f;  // 5% margin for numerical stability
+    const float clampedFreq = std::min(frequency, maxSafeFreq);
+
     float A = std::pow(10.0f, gainDb / 40.0f);
-    float w0 = 2.0f * 3.14159265358979f * frequency / static_cast<float>(sampleRate);
+    float w0 = 2.0f * 3.14159265358979f * clampedFreq / static_cast<float>(sampleRate);
     float cosW0 = std::cos(w0);
     float sinW0 = std::sin(w0);
     float alpha = sinW0 / (2.0f * q);
