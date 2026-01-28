@@ -74,7 +74,9 @@ cd build && ctest --output-on-failure
 | `NAP_ENABLE_SIMD` | ON | Enable SSE4.1 optimizations |
 | `NAP_USE_SYSTEM_GTEST` | OFF | Use system GoogleTest |
 
-## Usage
+## Quick Start
+
+### Basic Audio Processing
 
 ```cpp
 #include "core/graph/AudioGraph.h"
@@ -95,6 +97,28 @@ graph.connect(osc->getOutputPort(0), gain->getInputPort(0));
 graph.process(buffer, numFrames);
 ```
 
+### BiQuadFilter Example
+
+```cpp
+#include "nodes/effect/BiQuadFilter.h"
+
+// Create and configure filter
+nap::BiQuadFilter lpf;
+lpf.prepare(44100.0, 512);
+lpf.setFilterType(nap::BiQuadFilter::FilterType::LowPass);
+lpf.setFrequency(1000.0f);  // 1kHz cutoff
+lpf.setQ(0.707f);           // Butterworth response
+
+// Real-time processing (zero allocation)
+lpf.process(inputBuffer, outputBuffer, numFrames, 2);
+
+// Parameter automation
+auto* freqParam = lpf.getFrequencyParameter();
+freqParam->setValue(2000.0f);  // Smoothed over 10ms
+```
+
+**[→ Complete BiQuadFilter API Reference](docs/api/BiQuadFilter.md)**
+
 ## Audio Nodes
 
 ### Source Nodes
@@ -113,7 +137,10 @@ graph.process(buffer, numFrames);
 - `InverterNode` - Phase inversion
 
 ### Effect Nodes
-- `BiQuadFilter` - LP/HP/BP/Notch/Peak/Shelf filters
+- **`BiQuadFilter`** - High-performance biquad filter (LowPass, HighPass, BandPass, Notch)
+  - Transposed Direct Form II topology
+  - Zero allocation in process loop (~4µs per 512 samples)
+  - [API Reference](docs/api/BiQuadFilter.md) | [Architecture](docs/architecture/BiQuadFilter.md)
 - `SimpleDelay` - Basic delay line
 - `Chorus` - Chorus effect
 - `Flanger` - Flanger effect
@@ -128,6 +155,12 @@ graph.process(buffer, numFrames);
 - `MeterNode` - Level metering
 - `ScopeNode` - Waveform display
 - `DCBlockerNode` - DC offset removal
+
+## Documentation
+
+- **[BiQuadFilter API](docs/api/BiQuadFilter.md)** - Complete usage guide with examples
+- **[BiQuadFilter Architecture](docs/architecture/BiQuadFilter.md)** - Implementation details and design decisions
+- **Node Documentation** - Coming soon (see `docs/api/` for available nodes)
 
 ## License
 
