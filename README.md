@@ -162,6 +162,178 @@ freqParam->setValue(2000.0f);  // Smoothed over 10ms
 - **[BiQuadFilter Architecture](docs/architecture/BiQuadFilter.md)** - Implementation details and design decisions
 - **Node Documentation** - Coming soon (see `docs/api/` for available nodes)
 
+## Recent Updates
+
+### ✅ BiQuadFilter Implementation (January 2026)
+
+Complete implementation of high-performance BiQuadFilter with:
+- **Transposed Direct Form II topology** for numerical stability
+- **Zero heap allocation** in process loop (verified real-time safe)
+- **IParameter system integration** with smoothing and automation support
+- **Nyquist frequency protection** prevents filter instability at high frequencies
+- **Comprehensive documentation** (815 lines API reference + 459 lines architecture)
+- **25 passing tests** covering all functionality
+
+**Performance:** ~4.2µs per 512-sample stereo buffer on Apple M1 (0.036% CPU @ 44.1kHz)
+
+See: [docs/api/BiQuadFilter.md](docs/api/BiQuadFilter.md) | [docs/architecture/BiQuadFilter.md](docs/architecture/BiQuadFilter.md)
+
+## To-Do List
+
+### High Priority
+
+#### 🔴 Critical: Fix Driver Compilation Errors
+- [ ] **Fix `DeviceInfo` missing type definition**
+  - Affects: `AlsaDriver`, `ASIODriver`, `CoreAudioDriver`
+  - Files: `src/drivers/*/Driver.cpp`
+  - Issue: `error: use of undeclared identifier 'DeviceInfo'`
+  - Solution: Add proper type definition or include statement for `DeviceInfo` struct
+- [ ] **Fix incorrect `override` keywords on non-virtual functions**
+  - Affects: All driver `isRunning()` methods
+  - Issue: `error: only virtual member functions can be marked 'override'`
+  - Solution: Remove `override` from non-virtual methods or make base class methods virtual
+- [ ] **Fix audio callback signature mismatch**
+  - Affects: `AlsaDriver::audioCallback`, `ASIODriver::audioCallback`
+  - Issue: Expecting `const float*` but receiving `const float**`
+  - Solution: Update callback implementation to match `IAudioDriver` interface
+
+#### 🟡 BiQuadFilter Enhancements
+- [ ] **Implement remaining filter types**
+  - [ ] AllPass filter (phase manipulation)
+  - [ ] PeakingEQ (boost/cut at frequency)
+  - [ ] LowShelf (boost/cut below cutoff)
+  - [ ] HighShelf (boost/cut above cutoff)
+  - Coefficient formulas available in Audio EQ Cookbook
+- [ ] **Add SIMD optimizations**
+  - [ ] AVX/SSE implementation for 4x sample processing
+  - [ ] ARM NEON support for Apple Silicon
+  - Expected speedup: 2-3x (from 4µs to 1.5µs per buffer)
+- [ ] **Add coefficient interpolation for fast modulation**
+  - For audio-rate filter sweeps
+  - Interpolate coefficients per-sample during modulation
+
+### Medium Priority
+
+#### 📚 Documentation
+- [ ] **Generate Doxygen HTML documentation**
+  - Set up `docs/Doxyfile` configuration
+  - Auto-generate from header comments
+  - Host on GitHub Pages
+- [ ] **Document remaining audio nodes**
+  - Follow BiQuadFilter documentation template
+  - API reference + architecture docs for each node
+  - Target: 20+ nodes documented
+- [ ] **Add DSP theory documentation**
+  - `docs/theory/BiQuadFilters.md` - frequency response curves, Z-domain
+  - `docs/theory/Nyquist.md` - aliasing, sampling theory
+  - `docs/theory/ParameterSmoothing.md` - zipper noise prevention
+- [ ] **Create getting started guide**
+  - `docs/getting-started.md` with step-by-step tutorial
+  - Build your first audio graph
+  - Common patterns and best practices
+
+#### 🧪 Testing
+- [ ] **Increase test coverage**
+  - Current: BiQuadFilter has 25 comprehensive tests
+  - Target: 80%+ coverage across all nodes
+  - Add tests for graph topology, serialization, threading
+- [ ] **Add integration tests**
+  - Multi-node graph scenarios
+  - Parameter automation workflows
+  - Real-time performance under load
+- [ ] **Set up continuous benchmarking**
+  - Track performance regressions
+  - Store benchmark results in repository
+  - Generate performance comparison reports
+
+### Low Priority
+
+#### 🚀 Performance
+- [ ] **Profile hot paths**
+  - Identify bottlenecks in AudioGraph::process()
+  - Optimize critical sections
+  - Measure memory allocations
+- [ ] **Implement optional oversampling for BiQuadFilter**
+  - 2x/4x oversampling for high Q settings
+  - Reduces aliasing artifacts at extreme resonance
+  - Tradeoff: 2-4x CPU cost
+- [ ] **Optimize graph execution**
+  - Parallelize independent node chains
+  - SIMD batch processing for multiple nodes
+  - Cache-friendly memory layout
+
+#### 🛠️ Infrastructure
+- [ ] **Set up CI/CD pipeline**
+  - GitHub Actions for build verification
+  - Automated testing on push/PR
+  - Multi-platform builds (macOS, Linux, Windows)
+- [ ] **Add CMake presets**
+  - Development, Release, Debug configurations
+  - Platform-specific optimizations
+  - Easier onboarding for new contributors
+- [ ] **Improve cross-platform support**
+  - Fix Windows ASIO driver issues
+  - Test Linux ALSA/JACK/PulseAudio drivers
+  - Ensure macOS CoreAudio stability
+
+#### 🎨 Features
+- [ ] **Add visual graph editor** (future consideration)
+  - Node-based UI for graph construction
+  - Real-time parameter visualization
+  - Waveform/spectrum displays
+- [ ] **MIDI integration improvements**
+  - MIDI CC to parameter mapping system
+  - MIDI learn functionality
+  - Note-based modulation sources
+- [ ] **Preset browser**
+  - UI for loading/saving presets
+  - Preset categories and tagging
+  - Factory preset library
+
+### Code Quality
+
+- [ ] **Address compiler warnings**
+  - Fix all `-Wall -Wextra` warnings
+  - Enable `-Werror` for strict builds
+- [ ] **Modernize C++ usage**
+  - Replace raw pointers with smart pointers where appropriate
+  - Use `std::span` for buffer passing (C++20)
+  - Adopt `constexpr` for compile-time constants
+- [ ] **Add static analysis**
+  - clang-tidy integration
+  - cppcheck for bug detection
+  - Address sanitizer for memory issues
+
+### Documentation Maintenance
+
+- [ ] **Keep benchmark data current**
+  - Re-run benchmarks quarterly
+  - Update `docs/architecture/BiQuadFilter.md` with latest numbers
+  - Flag performance regressions
+- [ ] **Review documentation for staleness**
+  - Quarterly doc review process
+  - Update examples to match current API
+  - Archive obsolete documentation
+
+---
+
+## Project Status
+
+| Component | Status | Test Coverage | Documentation |
+|-----------|--------|---------------|---------------|
+| BiQuadFilter | ✅ Complete | 25/25 tests passing | ✅ Comprehensive |
+| Audio Drivers | ⚠️ Compilation errors | - | ⚠️ Needs update |
+| Parameter System | ✅ Working | ✅ Good | ⚠️ Needs expansion |
+| Audio Graph | ✅ Working | ⚠️ Partial | ⚠️ Needs docs |
+| Other Nodes | ⚠️ Various states | ⚠️ Varies | ❌ Missing |
+
+**Legend:**
+- ✅ Complete and tested
+- ⚠️ Functional but needs work
+- ❌ Missing or broken
+
+---
+
 ## License
 
 MIT License
