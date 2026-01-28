@@ -20,9 +20,10 @@ public:
     float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f;
     float a1 = 0.0f, a2 = 0.0f;
 
-    // State variables (stereo)
-    float x1L = 0.0f, x2L = 0.0f, y1L = 0.0f, y2L = 0.0f;
-    float x1R = 0.0f, x2R = 0.0f, y1R = 0.0f, y2R = 0.0f;
+    // State variables for Transposed Direct Form II (stereo)
+    // Only 2 state variables per channel instead of 4
+    float s1L = 0.0f, s2L = 0.0f;
+    float s1R = 0.0f, s2R = 0.0f;
 
     void calculateCoefficients();
 };
@@ -101,21 +102,26 @@ void BiQuadFilter::process(const float* inputBuffer, float* outputBuffer,
         return;
     }
 
+    // Transposed Direct Form II - more numerically stable than Direct Form I
+    // Algorithm:
+    //   y[n] = b0*x[n] + s1[n-1]
+    //   s1[n] = b1*x[n] - a1*y[n] + s2[n-1]
+    //   s2[n] = b2*x[n] - a2*y[n]
+
     for (std::uint32_t i = 0; i < numFrames; ++i) {
         // Left channel
-        float inL = inputBuffer[i * numChannels];
-        float outL = m_impl->b0 * inL + m_impl->b1 * m_impl->x1L + m_impl->b2 * m_impl->x2L
-                   - m_impl->a1 * m_impl->y1L - m_impl->a2 * m_impl->y2L;
-        m_impl->x2L = m_impl->x1L; m_impl->x1L = inL;
-        m_impl->y2L = m_impl->y1L; m_impl->y1L = outL;
+        const float inL = inputBuffer[i * numChannels];
+        const float outL = m_impl->b0 * inL + m_impl->s1L;
+        m_impl->s1L = m_impl->b1 * inL - m_impl->a1 * outL + m_impl->s2L;
+        m_impl->s2L = m_impl->b2 * inL - m_impl->a2 * outL;
         outputBuffer[i * numChannels] = outL;
 
         if (numChannels > 1) {
-            float inR = inputBuffer[i * numChannels + 1];
-            float outR = m_impl->b0 * inR + m_impl->b1 * m_impl->x1R + m_impl->b2 * m_impl->x2R
-                       - m_impl->a1 * m_impl->y1R - m_impl->a2 * m_impl->y2R;
-            m_impl->x2R = m_impl->x1R; m_impl->x1R = inR;
-            m_impl->y2R = m_impl->y1R; m_impl->y1R = outR;
+            // Right channel
+            const float inR = inputBuffer[i * numChannels + 1];
+            const float outR = m_impl->b0 * inR + m_impl->s1R;
+            m_impl->s1R = m_impl->b1 * inR - m_impl->a1 * outR + m_impl->s2R;
+            m_impl->s2R = m_impl->b2 * inR - m_impl->a2 * outR;
             outputBuffer[i * numChannels + 1] = outR;
         }
     }
@@ -130,8 +136,8 @@ void BiQuadFilter::prepare(double sampleRate, std::uint32_t blockSize)
 
 void BiQuadFilter::reset()
 {
-    m_impl->x1L = m_impl->x2L = m_impl->y1L = m_impl->y2L = 0.0f;
-    m_impl->x1R = m_impl->x2R = m_impl->y1R = m_impl->y2R = 0.0f;
+    m_impl->s1L = m_impl->s2L = 0.0f;
+    m_impl->s1R = m_impl->s2R = 0.0f;
 }
 
 std::string BiQuadFilter::getNodeId() const { return m_impl->nodeId; }
