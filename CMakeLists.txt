@@ -77,6 +77,44 @@ set(NAP_DRIVER_SOURCES
     src/drivers/DummyDriver.cpp
 )
 
+# Hardware Driver Layer subdirectories (Phase 3)
+set(NAP_DRIVER_PLATFORM_SOURCES
+    # ASIO (Windows)
+    src/drivers/asio/ASIODriver.cpp
+    src/drivers/asio/ASIOBufferSwitch.cpp
+    # CoreAudio (macOS)
+    src/drivers/coreaudio/CoreAudioDriver.cpp
+    src/drivers/coreaudio/CoreAudioDeviceList.cpp
+    # ALSA (Linux)
+    src/drivers/alsa/AlsaDriver.cpp
+    src/drivers/alsa/AlsaMidiDriver.cpp
+    # JACK (Linux Pro Audio)
+    src/drivers/jack/JackDriver.cpp
+    src/drivers/jack/JackClient.cpp
+    # Dummy/Null (Testing/CI)
+    src/drivers/dummy/NullAudioDriver.cpp
+)
+
+# Event & MIDI System (Phase 3)
+set(NAP_EVENT_SOURCES
+    src/events/MidiMessage.cpp
+    src/events/SysexMessage.cpp
+)
+
+# Benchmark sources (Phase 3)
+set(NAP_BENCHMARK_SOURCES
+    benchmarks/nodes/Bench_GainNode.cpp
+    benchmarks/nodes/Bench_BiQuadFilter.cpp
+    benchmarks/nodes/Bench_ReverbConvolution.cpp
+    benchmarks/nodes/Bench_DelayLine.cpp
+    benchmarks/nodes/Bench_Oscillator.cpp
+    benchmarks/nodes/Bench_Mixer.cpp
+    benchmarks/nodes/Bench_Splitter.cpp
+    benchmarks/nodes/Bench_Compressor.cpp
+    benchmarks/nodes/Bench_Limiter.cpp
+    benchmarks/nodes/Bench_Gate.cpp
+)
+
 # DSP Utility sources (Phase 2)
 set(NAP_DSP_SOURCES
     src/utils/dsp/FastFourierTransform.cpp
@@ -122,8 +160,22 @@ add_library(native-audio-pipe STATIC
     ${NAP_CORE_SOURCES}
     ${NAP_NODE_SOURCES}
     ${NAP_DRIVER_SOURCES}
+    ${NAP_DRIVER_PLATFORM_SOURCES}
     ${NAP_DSP_SOURCES}
+    ${NAP_EVENT_SOURCES}
 )
+
+# Benchmark library (Phase 3)
+option(NAP_BUILD_BENCHMARKS "Build performance benchmarks" ON)
+if(NAP_BUILD_BENCHMARKS)
+    add_library(nap-benchmarks STATIC ${NAP_BENCHMARK_SOURCES})
+    target_include_directories(nap-benchmarks
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/benchmarks>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    )
+    target_link_libraries(nap-benchmarks PRIVATE native-audio-pipe)
+endif()
 
 target_include_directories(native-audio-pipe
     PUBLIC
@@ -158,6 +210,7 @@ if(NAP_BUILD_TESTS)
         tests/unit/nodes/utility/*.cpp
         tests/unit/drivers/*.cpp
         tests/unit/utils/dsp/*.cpp
+        tests/unit/events/*.cpp
     )
 
     add_executable(nap_tests ${NAP_TEST_SOURCES})
@@ -174,6 +227,7 @@ if(NAP_BUILD_TESTS)
         PRIVATE
             ${GTEST_INCLUDE_DIRS}
             ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks
     )
 
     # Register tests with CTest
@@ -204,11 +258,12 @@ install(EXPORT native-audio-pipe-targets
 # Summary
 message(STATUS "")
 message(STATUS "native-audio-pipe configuration:")
-message(STATUS "  Version:      ${PROJECT_VERSION}")
-message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "  Build tests:  ${NAP_BUILD_TESTS}")
-message(STATUS "  SIMD:         ${NAP_ENABLE_SIMD}")
+message(STATUS "  Version:       ${PROJECT_VERSION}")
+message(STATUS "  C++ Standard:  ${CMAKE_CXX_STANDARD}")
+message(STATUS "  Build tests:   ${NAP_BUILD_TESTS}")
+message(STATUS "  Build benchmarks: ${NAP_BUILD_BENCHMARKS}")
+message(STATUS "  SIMD:          ${NAP_ENABLE_SIMD}")
 if(APPLE)
-    message(STATUS "  CoreAudio:    ${COREAUDIO_FOUND}")
+    message(STATUS "  CoreAudio:     ${COREAUDIO_FOUND}")
 endif()
 message(STATUS "")
