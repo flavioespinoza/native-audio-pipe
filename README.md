@@ -1,142 +1,80 @@
 # native-audio-pipe
 
-Enterprise-grade C++ audio engine with modular node-based architecture.
+A modular, real-time C++ audio engine built around a node graph. Nodes process audio in topologically-sorted order. Every node's parameters are first-class objects with built-in smoothing, range clamping, and change callbacks — so automation, MIDI CC, and preset load all work without touching the audio thread.
 
-## Features
+## Documentation
 
-- **Modular Node Graph** - Flexible audio routing with automatic execution ordering
-- **24 Audio Nodes** - Oscillators, filters, effects, and utilities
-- **Real-time Safe** - Lock-free data structures and pool allocators
-- **Cross-Platform Drivers** - CoreAudio (macOS), ALSA/PulseAudio/JACK (Linux), ASIO (Windows)
-- **Parameter System** - Type-safe parameters with smoothing and automation
-- **Serialization** - JSON and binary preset save/load
-- **DSP Utilities** - FFT, window functions, resampling, DC blocking
+| Document | What it covers |
+|----------|----------------|
+| [Architecture](docs/architecture.md) | How subsystems connect, data flow from driver to output, why TDF-II / why Pimpl / why two-stage smoothing |
+| [Adding a node](docs/adding-a-node.md) | Step-by-step walkthrough — header, Pimpl, parameters, tests, benchmark |
 
-## Project Structure
-
-```
-native-audio-pipe/
-├── src/
-│   ├── api/                    # Public interfaces
-│   │   ├── IAudioNode.h
-│   │   ├── IAudioSource.h
-│   │   ├── IAudioSink.h
-│   │   └── IParameter.h
-│   ├── core/
-│   │   ├── graph/              # Audio graph management
-│   │   ├── memory/             # Lock-free buffers, allocators
-│   │   ├── threading/          # Worker threads, task queues
-│   │   ├── parameters/         # Typed parameter system
-│   │   └── serialization/      # JSON/Binary serializers
-│   ├── nodes/
-│   │   ├── math/               # Gain, Pan, Mixer, Splitter, etc.
-│   │   ├── source/             # Oscillators, Noise, File reader
-│   │   ├── effect/             # Filters, Delays, Distortion, Reverb
-│   │   └── utility/            # Meters, Scopes, DC Blocker
-│   ├── drivers/                # Platform audio drivers
-│   └── utils/dsp/              # FFT, Windows, Resampler
-├── tests/unit/                 # GoogleTest unit tests
-├── docs/nodes/                 # Node documentation
-└── cmake/                      # CMake modules
-```
-
-## Requirements
-
-- CMake 3.16+
-- C++17 compiler (GCC 8+, Clang 7+, MSVC 2019+)
-- GoogleTest (auto-fetched if not found)
-
-### Platform-specific
-
-- **macOS**: Xcode Command Line Tools
-- **Linux**: ALSA dev libraries (`libasound2-dev`)
-- **Windows**: Visual Studio 2019+
+Read the architecture doc first. If you want to contribute a new node, the adding-a-node guide walks through every convention the codebase follows.
 
 ## Build
 
 ```bash
-# Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-# Build
 cmake --build build --parallel
-
-# Run tests
 cd build && ctest --output-on-failure
 ```
 
-### Build Options
+On ARM macOS, add `-DNAP_ENABLE_SIMD=OFF` to the configure step (the SSE flags are x86-only).
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `NAP_BUILD_TESTS` | ON | Build unit tests |
-| `NAP_BUILD_EXAMPLES` | OFF | Build example applications |
-| `NAP_ENABLE_SIMD` | ON | Enable SSE4.1 optimizations |
-| `NAP_USE_SYSTEM_GTEST` | OFF | Use system GoogleTest |
+Platform driver stubs for ALSA/JACK/ASIO are gated behind `-DNAP_BUILD_PLATFORM_DRIVERS=ON` and only compile on their respective platforms. Tests and benchmarks build without them.
 
-## Usage
+## Quick start
 
 ```cpp
 #include "core/graph/AudioGraph.h"
 #include "nodes/source/SineOscillator.h"
+#include "nodes/effect/BiQuadFilter.h"
 #include "nodes/math/GainNode.h"
 
-// Create nodes
-auto osc = nap::SineOscillatorFactory::create(440.0f);
-auto gain = nap::GainNodeFactory::create(0.5f);
-
-// Build graph
 nap::AudioGraph graph;
-graph.addNode(osc);
-graph.addNode(gain);
-graph.connect(osc->getOutputPort(0), gain->getInputPort(0));
 
-// Process audio
-graph.process(buffer, numFrames);
+auto osc    = std::make_shared<nap::SineOscillator>();
+auto filter = std::make_shared<nap::BiQuadFilter>();
+auto gain   = std::make_shared<nap::GainNode>();
+
+// Wire the graph
+graph.addNode(osc);
+graph.addNode(filter);
+graph.addNode(gain);
+graph.connect(osc->getNodeId(),    0, filter->getNodeId(), 0);
+graph.connect(filter->getNodeId(), 0, gain->getNodeId(),   0);
+
+// Configure
+graph.prepare(44100.0, 512);
+filter->setFilterType(nap::BiQuadFilter::FilterType::LowPass);
+filter->setFrequency(2000.0f);
+
+// Process one block
+graph.processBlock(512);
 ```
 
-## Audio Nodes
+## What's in the engine
 
-### Source Nodes
-- `SineOscillator` - Sine wave generator
-- `WhiteNoise` - White noise generator
-- `PinkNoise` - Pink noise (1/f) generator
-- `ImpulseGenerator` - Impulse/click generator
-- `FileStreamReader` - Audio file playback
+**Source nodes** — `SineOscillator`, `WhiteNoise`, `PinkNoise`, `ImpulseGenerator`, `FileStreamReader`
 
-### Math Nodes
-- `GainNode` - Volume control
-- `PanNode` - Stereo panning
-- `MixerNode` - Multi-input mixer
-- `SplitterNode` - Signal splitter
-- `SummerNode` - Signal summer
-- `InverterNode` - Phase inversion
+**Effect nodes** — `BiQuadFilter` (LP/HP/BP/Notch), `SimpleDelay`, `Chorus`, `Flanger`, `Phaser`, `HardClipper`, `SoftClipper`, `BitCrusher`, `RingModulator`, `ReverbConvolution`
 
-### Effect Nodes
-- `BiQuadFilter` - LP/HP/BP/Notch/Peak/Shelf filters
-- `SimpleDelay` - Basic delay line
-- `Chorus` - Chorus effect
-- `Flanger` - Flanger effect
-- `Phaser` - Phaser effect
-- `HardClipper` - Hard clipping distortion
-- `SoftClipper` - Soft saturation
-- `BitCrusher` - Bit depth reduction
-- `RingModulator` - Ring modulation
-- `ReverbConvolution` - Convolution reverb
+**Math nodes** — `GainNode`, `PanNode`, `MixerNode`, `SplitterNode`, `SummerNode`, `InverterNode`
 
-### Utility Nodes
-- `MeterNode` - Level metering
-- `ScopeNode` - Waveform display
-- `DCBlockerNode` - DC offset removal
+**Utility nodes** — `MeterNode`, `ScopeNode`, `DCBlockerNode`
+
+**Drivers** — CoreAudio (macOS), ALSA / PulseAudio / JACK (Linux), ASIO (Windows), NullDriver (testing)
+
+**Serialization** — JSON and binary preset save/load with a PresetManager for directory-based preset libraries
+
+**DSP utilities** — FFT, window functions (Hann, Hamming, Blackman, Kaiser, etc.), resampling, DC blocking
+
+## Requirements
+
+- C++17 compiler (GCC 8+, Clang 7+, MSVC 2019+)
+- CMake 3.16+
+- GoogleTest (fetched automatically at configure time)
 
 ## License
 
-MIT License
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-
-Issues and feature requests welcome at [GitHub Issues](https://github.com/flavioespinoza/native-audio-pipe/issues).
+MIT
