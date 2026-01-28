@@ -6,6 +6,10 @@
 
 namespace nap {
 
+// Forward declarations
+class FloatParameter;
+class EnumParameter;
+
 /**
  * @brief Audio effect node implementing a biquad filter.
  */
@@ -42,7 +46,7 @@ public:
     bool isBypassed() const override;
     void setBypassed(bool bypassed) override;
 
-    // BiQuadFilter specific
+    // BiQuadFilter specific (direct access - use for non-automated control)
     void setFilterType(FilterType type);
     FilterType getFilterType() const;
     void setFrequency(float frequencyHz);
@@ -51,6 +55,12 @@ public:
     float getQ() const;
     void setGain(float gainDb);
     float getGain() const;
+
+    // IParameter system integration (use for automation, presets, UI binding)
+    FloatParameter* getFrequencyParameter();
+    FloatParameter* getQParameter();
+    EnumParameter* getFilterTypeParameter();
+    FloatParameter* getGainParameter();
 
 private:
     class Impl;

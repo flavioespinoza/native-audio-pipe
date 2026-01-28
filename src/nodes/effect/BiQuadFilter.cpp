@@ -1,7 +1,10 @@
 #include "BiQuadFilter.h"
+#include "../../core/parameters/FloatParameter.h"
+#include "../../core/parameters/EnumParameter.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 namespace nap {
 
@@ -24,6 +27,18 @@ public:
     // Only 2 state variables per channel instead of 4
     float s1L = 0.0f, s2L = 0.0f;
     float s1R = 0.0f, s2R = 0.0f;
+
+    // IParameter system integration
+    std::unique_ptr<FloatParameter> frequencyParam;
+    std::unique_ptr<FloatParameter> qParam;
+    std::unique_ptr<EnumParameter> filterTypeParam;
+    std::unique_ptr<FloatParameter> gainParam;
+
+    // Track current smoothed values to detect changes
+    float currentSmoothedFreq = 1000.0f;
+    float currentSmoothedQ = 0.707f;
+    float currentSmoothedGain = 0.0f;
+    bool coefficientsNeedUpdate = false;
 
     void calculateCoefficients();
 };
@@ -86,6 +101,52 @@ BiQuadFilter::BiQuadFilter()
 {
     static int instanceCounter = 0;
     m_impl->nodeId = "BiQuadFilter_" + std::to_string(++instanceCounter);
+
+    // Initialize IParameter system integration
+    // Frequency: 20 Hz to 20 kHz (audible range)
+    m_impl->frequencyParam = std::make_unique<FloatParameter>(
+        "Frequency", 1000.0f, 20.0f, 20000.0f);
+    m_impl->frequencyParam->enableSmoothing(true, 0.01f);  // 10ms smoothing time
+
+    // Q: 0.1 to 20.0 (resonance/bandwidth control)
+    m_impl->qParam = std::make_unique<FloatParameter>(
+        "Q", 0.707f, 0.1f, 20.0f);
+    m_impl->qParam->enableSmoothing(true, 0.01f);  // 10ms smoothing time
+
+    // Filter Type: LowPass, HighPass, BandPass, Notch
+    std::vector<std::string> filterTypeOptions = {
+        "LowPass", "HighPass", "BandPass", "Notch"
+    };
+    m_impl->filterTypeParam = std::make_unique<EnumParameter>(
+        "Filter Type", filterTypeOptions, 0);  // Default: LowPass
+
+    // Gain: -24 dB to +24 dB (for Peaking EQ, Shelving filters)
+    m_impl->gainParam = std::make_unique<FloatParameter>(
+        "Gain", 0.0f, -24.0f, 24.0f);
+    m_impl->gainParam->enableSmoothing(true, 0.01f);  // 10ms smoothing time
+
+    // Wire up change callbacks - these fire when external systems change parameters
+    // (automation, MIDI CC, preset load, UI interaction)
+    m_impl->frequencyParam->setChangeCallback([this](float oldValue, float newValue) {
+        m_impl->frequency = newValue;
+        m_impl->coefficientsNeedUpdate = true;
+    });
+
+    m_impl->qParam->setChangeCallback([this](float oldValue, float newValue) {
+        m_impl->q = newValue;
+        m_impl->coefficientsNeedUpdate = true;
+    });
+
+    m_impl->filterTypeParam->setChangeCallback([this](size_t oldIndex, size_t newIndex) {
+        m_impl->filterType = static_cast<FilterType>(newIndex);
+        m_impl->coefficientsNeedUpdate = true;
+    });
+
+    m_impl->gainParam->setChangeCallback([this](float oldValue, float newValue) {
+        m_impl->gainDb = newValue;
+        m_impl->coefficientsNeedUpdate = true;
+    });
+
     m_impl->calculateCoefficients();
 }
 
@@ -100,6 +161,38 @@ void BiQuadFilter::process(const float* inputBuffer, float* outputBuffer,
     if (m_impl->bypassed) {
         std::copy(inputBuffer, inputBuffer + numFrames * numChannels, outputBuffer);
         return;
+    }
+
+    // Get smoothed parameter values ONCE per buffer (not per sample)
+    // This prevents zipper noise while maintaining performance
+    const float smoothedFreq = m_impl->frequencyParam->getSmoothedValue(
+        static_cast<float>(m_impl->sampleRate));
+    const float smoothedQ = m_impl->qParam->getSmoothedValue(
+        static_cast<float>(m_impl->sampleRate));
+    const float smoothedGain = m_impl->gainParam->getSmoothedValue(
+        static_cast<float>(m_impl->sampleRate));
+
+    // Check if smoothed values have changed enough to warrant coefficient recalculation
+    // Use a small epsilon to avoid unnecessary recalculations due to floating point noise
+    const float epsilon = 0.0001f;
+    const bool freqChanged = std::abs(smoothedFreq - m_impl->currentSmoothedFreq) > epsilon;
+    const bool qChanged = std::abs(smoothedQ - m_impl->currentSmoothedQ) > epsilon;
+    const bool gainChanged = std::abs(smoothedGain - m_impl->currentSmoothedGain) > epsilon;
+
+    if (freqChanged || qChanged || gainChanged || m_impl->coefficientsNeedUpdate) {
+        // Update internal state with smoothed values
+        m_impl->frequency = smoothedFreq;
+        m_impl->q = smoothedQ;
+        m_impl->gainDb = smoothedGain;
+
+        // Store current smoothed values for next buffer
+        m_impl->currentSmoothedFreq = smoothedFreq;
+        m_impl->currentSmoothedQ = smoothedQ;
+        m_impl->currentSmoothedGain = smoothedGain;
+
+        // Recalculate filter coefficients once per buffer
+        m_impl->calculateCoefficients();
+        m_impl->coefficientsNeedUpdate = false;
     }
 
     // Transposed Direct Form II - more numerically stable than Direct Form I
@@ -147,13 +240,61 @@ std::uint32_t BiQuadFilter::getNumOutputChannels() const { return 2; }
 bool BiQuadFilter::isBypassed() const { return m_impl->bypassed; }
 void BiQuadFilter::setBypassed(bool bypassed) { m_impl->bypassed = bypassed; }
 
-void BiQuadFilter::setFilterType(FilterType type) { m_impl->filterType = type; m_impl->calculateCoefficients(); }
-BiQuadFilter::FilterType BiQuadFilter::getFilterType() const { return m_impl->filterType; }
-void BiQuadFilter::setFrequency(float frequencyHz) { m_impl->frequency = frequencyHz; m_impl->calculateCoefficients(); }
-float BiQuadFilter::getFrequency() const { return m_impl->frequency; }
-void BiQuadFilter::setQ(float q) { m_impl->q = q; m_impl->calculateCoefficients(); }
-float BiQuadFilter::getQ() const { return m_impl->q; }
-void BiQuadFilter::setGain(float gainDb) { m_impl->gainDb = gainDb; m_impl->calculateCoefficients(); }
-float BiQuadFilter::getGain() const { return m_impl->gainDb; }
+void BiQuadFilter::setFilterType(FilterType type) {
+    // Update both internal state and parameter (syncs the two systems)
+    m_impl->filterType = type;
+    m_impl->filterTypeParam->setSelectedIndex(static_cast<size_t>(type));
+}
+
+BiQuadFilter::FilterType BiQuadFilter::getFilterType() const {
+    return m_impl->filterType;
+}
+
+void BiQuadFilter::setFrequency(float frequencyHz) {
+    // Update both internal state and parameter (syncs the two systems)
+    m_impl->frequency = frequencyHz;
+    m_impl->frequencyParam->setValue(frequencyHz);
+}
+
+float BiQuadFilter::getFrequency() const {
+    return m_impl->frequency;
+}
+
+void BiQuadFilter::setQ(float q) {
+    // Update both internal state and parameter (syncs the two systems)
+    m_impl->q = q;
+    m_impl->qParam->setValue(q);
+}
+
+float BiQuadFilter::getQ() const {
+    return m_impl->q;
+}
+
+void BiQuadFilter::setGain(float gainDb) {
+    // Update both internal state and parameter (syncs the two systems)
+    m_impl->gainDb = gainDb;
+    m_impl->gainParam->setValue(gainDb);
+}
+
+float BiQuadFilter::getGain() const {
+    return m_impl->gainDb;
+}
+
+// IParameter system accessors - for automation, presets, UI binding
+FloatParameter* BiQuadFilter::getFrequencyParameter() {
+    return m_impl->frequencyParam.get();
+}
+
+FloatParameter* BiQuadFilter::getQParameter() {
+    return m_impl->qParam.get();
+}
+
+EnumParameter* BiQuadFilter::getFilterTypeParameter() {
+    return m_impl->filterTypeParam.get();
+}
+
+FloatParameter* BiQuadFilter::getGainParameter() {
+    return m_impl->gainParam.get();
+}
 
 } // namespace nap
