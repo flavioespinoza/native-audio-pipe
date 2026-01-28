@@ -213,4 +213,57 @@ TEST(BiQuadFilterTest, BypassPassesSignalThrough) {
     }
 }
 
+TEST(BiQuadFilterTest, FrequencyAboveNyquistDoesNotProduceNaN) {
+    // Setting cutoff above fs/2 must not produce NaN/inf coefficients or
+    // garbage output — the clamp in computeTargetCoefficients should catch it.
+    BiQuadFilter filter;
+    filter.prepare(SAMPLE_RATE, IR_LENGTH);
+    filter.setFilterType(BiQuadFilter::FilterType::LowPass);
+    filter.setFrequency(30000.0f);  // well above Nyquist (22050)
+    filter.setQ(0.707f);
+
+    auto ir = captureImpulseResponse(filter, IR_LENGTH);
+
+    // Every output sample must be finite
+    for (uint32_t i = 0; i < IR_LENGTH; ++i) {
+        EXPECT_TRUE(std::isfinite(ir[i]))
+            << "NaN or inf at sample " << i << " with freq above Nyquist";
+    }
+
+    // The filter should still attenuate high frequencies — it should behave
+    // like a low pass clamped near Nyquist, not alias to some random freq.
+    float magLow  = magnitudeToDb(magnitudeAtFrequency(ir, 100.0, SAMPLE_RATE));
+    float magHigh = magnitudeToDb(magnitudeAtFrequency(ir, 20000.0, SAMPLE_RATE));
+    EXPECT_GT(magLow, -3.0f)   << "Passband (100 Hz) should still pass";
+    EXPECT_LT(magHigh, magLow) << "20 kHz should be below 100 Hz in a low-pass";
+}
+
+TEST(BiQuadFilterTest, SampleRateChangeClampsPreviouslyValidFrequency) {
+    // Start at 44100 with a 20 kHz cutoff (valid).  Drop sample rate to 22050
+    // where Nyquist is 11025 — the 20 kHz is now above Nyquist.  The filter
+    // must still produce finite, sensible output after prepare().
+    BiQuadFilter filter;
+    filter.prepare(44100.0, IR_LENGTH);
+    filter.setFilterType(BiQuadFilter::FilterType::LowPass);
+    filter.setFrequency(20000.0f);
+    filter.setQ(0.707f);
+
+    // Now switch to a much lower sample rate
+    filter.prepare(22050.0, IR_LENGTH);
+
+    auto ir = captureImpulseResponse(filter, IR_LENGTH);
+
+    for (uint32_t i = 0; i < IR_LENGTH; ++i) {
+        EXPECT_TRUE(std::isfinite(ir[i]))
+            << "NaN or inf at sample " << i << " after sample rate drop";
+    }
+
+    // At 22050, a low-pass clamped near 11025 should still attenuate 10 kHz
+    // noticeably relative to 100 Hz.
+    float magLow  = magnitudeToDb(magnitudeAtFrequency(ir, 100.0, 22050.0));
+    float magHigh = magnitudeToDb(magnitudeAtFrequency(ir, 10000.0, 22050.0));
+    EXPECT_GT(magLow, -6.0f)   << "Passband (100 Hz) should pass at new rate";
+    EXPECT_LT(magHigh, magLow) << "10 kHz should be attenuated vs 100 Hz";
+}
+
 }} // namespace nap::test

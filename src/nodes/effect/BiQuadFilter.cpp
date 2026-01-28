@@ -67,6 +67,11 @@ public:
 
 void BiQuadFilter::Impl::computeTargetCoefficients(float frequency, float q, FilterType type)
 {
+    // Clamp to just below Nyquist — above fs/2 the math aliases silently.
+    const float nyquist = static_cast<float>(sampleRate) * 0.5f;
+    frequency = std::min(frequency, nyquist - 1.0f);
+    frequency = std::max(frequency, 1.0f);  // avoid division-by-zero at DC
+
     float w0 = 2.0f * 3.14159265358979323846f * frequency / static_cast<float>(sampleRate);
     float cosW0 = std::cos(w0);
     float sinW0 = std::sin(w0);
