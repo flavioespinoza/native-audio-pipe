@@ -155,15 +155,20 @@ set(NAP_NODE_SOURCES
     src/nodes/utility/DCBlockerNode.cpp
 )
 
+# Skip platform driver stubs on CI / cross-platform builds
+option(NAP_BUILD_PLATFORM_DRIVERS "Build platform-specific driver stubs" OFF)
+
 # Create the main library
 add_library(native-audio-pipe STATIC
     ${NAP_CORE_SOURCES}
     ${NAP_NODE_SOURCES}
     ${NAP_DRIVER_SOURCES}
-    ${NAP_DRIVER_PLATFORM_SOURCES}
     ${NAP_DSP_SOURCES}
     ${NAP_EVENT_SOURCES}
 )
+if(NAP_BUILD_PLATFORM_DRIVERS)
+    target_sources(native-audio-pipe PRIVATE ${NAP_DRIVER_PLATFORM_SOURCES})
+endif()
 
 # Benchmark library (Phase 3)
 option(NAP_BUILD_BENCHMARKS "Build performance benchmarks" ON)
