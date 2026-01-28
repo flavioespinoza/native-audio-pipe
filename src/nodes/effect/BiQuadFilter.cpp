@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 namespace nap {
 
@@ -99,7 +100,8 @@ BiQuadFilter::BiQuadFilter()
     // Wire up IParameter-backed parameters
     m_impl->paramFilterType = std::make_unique<EnumParameter>(
         "filterType",
-        {"LowPass", "HighPass", "BandPass", "Notch", "AllPass", "PeakingEQ", "LowShelf", "HighShelf"},
+        std::vector<std::string>{"LowPass", "HighPass", "BandPass", "Notch",
+                                 "AllPass", "PeakingEQ", "LowShelf", "HighShelf"},
         0  // default: LowPass
     );
     m_impl->paramFrequency = std::make_unique<FloatParameter>(

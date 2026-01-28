@@ -146,7 +146,7 @@ std::vector<float> Resampler::resample(const float* input, size_t inputSize,
                 output[i] = pImpl->interpolateLinear(samples + halfTaps - 1, frac);
                 break;
             case ResamplerQuality::Medium:
-                output[i] = pImpl->interpolateCubic(samples + halfTaps - 2, frac);
+                output[i] = pImpl->interpolateCubic(samples + halfTaps - 1, frac);
                 break;
             case ResamplerQuality::High:
             case ResamplerQuality::Best:
