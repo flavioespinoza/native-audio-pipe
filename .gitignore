@@ -1,44 +1,66 @@
-# Build directories
-build/
-cmake-build-*/
-out/
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
 
-# IDE
-.idea/
-.vscode/
+# Flavio's sandbox
+TEMP.md
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
 *.swp
 *.swo
 *~
 
-# Compiled Object files
+# IDE
+.idea/
+*.sublime-*
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp
+
+# === JavaScript/TypeScript/Node/React ===
+node_modules/
+dist/
+.next/
+.nuxt/
+*.tsbuildinfo
+.npm
+.yarn/cache
+
+# === Python ===
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# === C++ ===
+build/
+cmake-build-*/
+out/
 *.o
 *.obj
 *.lo
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Compiled Static libraries
 *.a
 *.lib
-
-# Executables
 *.exe
 *.out
 *.app
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# CMake
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
